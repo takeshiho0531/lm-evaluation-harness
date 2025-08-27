@@ -75,6 +75,14 @@ class ContextSampler:
                 )
             self.docs = self.docs.select(fewshot_indices)
 
+        import os
+        import json
+        self.retrieved_texts = None
+        retrieved_json_path = "/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/api/validation_splitindex_to_text.json"
+        if os.path.exists(retrieved_json_path):
+            with open(retrieved_json_path, "r") as f:
+                self.retrieved_texts = json.load(f)
+
     def get_context(self, doc: dict, num_fewshot: int, gen_prefix: str = None):
         # draw an extra fewshot sample if using same split as evaluating on
         prefix = gen_prefix + " " if gen_prefix else ""
@@ -92,11 +100,30 @@ class ContextSampler:
         selected_docs = [x for x in fewshotex if x != doc][:num_fewshot]
 
         labeled_examples = ""
-        for doc in selected_docs:
+        for idx, doc in selected_docs:
             doc_content = self.doc_to_text(doc)
             doc_target = self.doc_to_target(doc)
             if self.config.doc_to_choice is None or isinstance(doc_content, str):
+                ### RAG fewshot
+                retrieved_doc_id = idx + 1
+                retrieved_passages = (
+                    self.retrieved_texts.get(str(retrieved_doc_id))
+                    if self.retrieved_texts else None
+                )
+
+                if retrieved_passages:
+                    context = "".join(retrieved_passages)
+                    if isinstance(doc_content, str):
+                        contexts = (
+                            "Context:"
+                            + context
+                            + "\n-----"
+                        )
+
+                        doc_content = contexts + "\n" + doc_content
+                ######
                 labeled_examples += doc_content
+
             else:
                 labeled_examples += self.doc_to_choice(doc)[doc_content]
 
@@ -185,8 +212,8 @@ class ContextSampler:
         """
         Draw `n` samples from our fewshot docs. This method should be overridden by subclasses.
         """
-
-        return self.rnd.sample(self.docs, n)
+        sampled_docs = self.rnd.sample(list(enumerate(self.docs)), n)
+        return sampled_docs
 
 
 class FirstNSampler(ContextSampler):

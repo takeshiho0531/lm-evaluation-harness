@@ -569,6 +569,18 @@ def evaluate(
             padding_requests[reqtype] += numpad
 
     ### Run LM on inputs, get all outputs ###
+    from tqdm import tqdm
+    ppl_mode = False  #TODO
+    if ppl_mode:
+        for task_output, limit in tqdm(
+            list(zip(eval_tasks, limits)),
+            total=len(eval_tasks),
+            desc="Processing tasks"
+        ):
+            task = task_output.task
+            ppl_results = _evaluate_perplexity_like_rulin(lm, task)
+            return {"perplexity_results": ppl_results}
+
     # execute each type of request
     for reqtype, reqs in requests.items():
         eval_logger.info(f"Running {reqtype} requests")
@@ -622,43 +634,56 @@ def evaluate(
                 world_size=WORLD_SIZE,
                 samples=indices,
             )
-            for doc_id, doc in doc_iterator:
-                if indices:
-                    doc_id_true = indices[doc_id]
-                else:
-                    doc_id_true = doc_id
-                requests = instances_by_doc_id[doc_id]
-                metrics = task.process_results(
-                    doc, [req.filtered_resps[filter_key] for req in requests]
-                )
-                if log_samples:
-                    target = task.doc_to_target(doc)
-                    example = {
-                        "doc_id": doc_id_true,
-                        "doc": doc,
-                        "target": target,
-                        "arguments": [req.args for req in requests],
-                        "resps": [req.resps for req in requests],
-                        "filtered_resps": [
-                            req.filtered_resps[filter_key] for req in requests
-                        ],
-                        "filter": filter_key,
-                        "metrics": list(metrics.keys()),
-                        "doc_hash": hash_string(
-                            json.dumps(
-                                requests[0].doc,
-                                indent=2,
-                                default=handle_non_serializable,
-                                ensure_ascii=False,
-                            )
-                        ),
-                        "prompt_hash": hash_string(requests[0].arguments[0]),
-                        "target_hash": hash_string(str(target)),
-                    }
-                    example.update(metrics)
-                    task_output.logged_samples.append(example)
-                for metric, value in metrics.items():
-                    task_output.sample_metrics[(metric, filter_key)].append(value)
+
+            task_name = next(iter(task_dict))
+            task_obj = task_dict[task_name]
+            num_fewshot = task_obj.config["num_fewshot"]
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            model_size = "06" # TODO
+            base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{model_size}"
+            os.makedirs(base_dir, exist_ok=True)
+            filename = os.path.join(base_dir, f"results_{task_name}_fewshot{num_fewshot}_{timestamp}.txt")
+            with open(filename, "w", encoding="utf-8") as f:
+                for doc_id, doc in doc_iterator:
+                    if indices:
+                        doc_id_true = indices[doc_id]
+                    else:
+                        doc_id_true = doc_id
+                    requests = instances_by_doc_id[doc_id]
+                    metrics = task.process_results(
+                        doc, [req.filtered_resps[filter_key] for req in requests]
+                    )
+                    output_line = f"Q {doc_id_true + 1} : {metrics}\n"
+                    f.write(output_line)
+                    if log_samples:
+                        target = task.doc_to_target(doc)
+                        example = {
+                            "doc_id": doc_id_true,
+                            "doc": doc,
+                            "target": target,
+                            "arguments": [req.args for req in requests],
+                            "resps": [req.resps for req in requests],
+                            "filtered_resps": [
+                                req.filtered_resps[filter_key] for req in requests
+                            ],
+                            "filter": filter_key,
+                            "metrics": list(metrics.keys()),
+                            "doc_hash": hash_string(
+                                json.dumps(
+                                    requests[0].doc,
+                                    indent=2,
+                                    default=handle_non_serializable,
+                                    ensure_ascii=False,
+                                )
+                            ),
+                            "prompt_hash": hash_string(requests[0].arguments[0]),
+                            "target_hash": hash_string(str(target)),
+                        }
+                        example.update(metrics)
+                        task_output.logged_samples.append(example)
+                    for metric, value in metrics.items():
+                        task_output.sample_metrics[(metric, filter_key)].append(value)
 
     if WORLD_SIZE > 1:
         # if multigpu, then gather data across all ranks to rank 0
@@ -785,3 +810,175 @@ def request_caching_arg_to_dict(cache_requests: str) -> dict:
     }
 
     return request_caching_args
+
+def _evaluate_perplexity_like_rulin(lm, task):
+    import math
+    import torch
+    from collections import defaultdict
+
+    tokenizer = getattr(lm, "tokenizer", None)
+    lm_model  = getattr(lm, "model", None)
+    device    = lm.device
+
+    total_loss = 0.0
+    total_samples = 0
+
+    pad_token = tokenizer.pad_token_id if tokenizer.eos_token_id is None else tokenizer.eos_token_id
+    per_item_rows = []
+
+    instances_by_doc_id = defaultdict(list)
+    for inst in task.instances:
+        instances_by_doc_id[inst.doc_id].append(inst)
+    for instances in instances_by_doc_id.values():
+        instances.sort(key=lambda x: x.idx)
+
+    def _norm_answer(x):
+        # 生成・MC両対応の正規化
+        if isinstance(x, dict):
+            for k in ("text", "answer", "value"):
+                if k in x:
+                    return str(x[k])
+            return str(x)
+        if isinstance(x, (list, tuple, set)):
+            # 最初の非空文字列を採用（TriviaQAの aliases 等を許容）
+            for y in x:
+                s = _norm_answer(y).strip()
+                if s:
+                    return s
+            return _norm_answer(next(iter(x))) if x else ""
+        if isinstance(x, int):
+            # MMLUの gold が int の場合は選択肢文字へ
+            if 0 <= x < 4:
+                return " " + "ABCD"[x]
+            return str(x)
+        if x is None:
+            return ""
+        return str(x)
+
+    for doc_id, instances in instances_by_doc_id.items():
+        doc = instances[0].doc
+
+        # get the gold continuation from the doc
+        try:
+            gold_cont = task.doc_to_target(doc)
+        except Exception:
+            gold_cont = doc.get("answer", None)
+        # gold_cont_str = _norm_answer(gold_cont).strip()
+        gold_cont_str = _norm_answer(gold_cont)
+
+
+        # MMLU向け: 選択肢一致で gold_inst を探す
+        gold_inst = None
+        for inst in instances:
+            if isinstance(inst.arguments, (list, tuple)) and len(inst.arguments) > 1:
+                cand = inst.arguments[1]
+                cand_str = _norm_answer(cand).strip()
+                if cand_str == gold_cont_str:
+                    gold_inst = inst
+                    break
+
+        # 生成タスク向けフォールバック
+        if gold_inst is None:
+            if len(instances) == 1 and isinstance(instances[0].arguments, (list, tuple)) and len(instances[0].arguments) >= 1:
+                context = _norm_answer(instances[0].arguments[0])
+                answer  = gold_cont_str
+            else:
+                # 他にも arguments[1] を持つものがあれば利用
+                picked = None
+                for inst in instances:
+                    if isinstance(inst.arguments, (list, tuple)) and len(inst.arguments) > 1:
+                        picked = inst
+                        break
+                if picked is None:
+                    # 何も作れない場合はスキップ
+                    continue
+                context = _norm_answer(picked.arguments[0])
+                # gold が取れていれば gold を優先、なければ arguments[1]
+                answer  = gold_cont_str if gold_cont_str else _norm_answer(picked.arguments[1]).strip()
+        else:
+            context = _norm_answer(gold_inst.arguments[0])
+            answer  = _norm_answer(gold_inst.arguments[1]).strip()
+
+        # 空文字はスキップ（稀にある）
+        if not answer.strip() or not context.strip():
+            continue
+
+        # 区切りを必ず1つ確保
+        if not (context.endswith(" ") or context.endswith("\n")):
+            context = context + " "
+        # 先頭が英数字なのにスペースが無ければ入れる（好みで）
+        if answer and not answer[0].isspace():
+            answer = " " + answer
+
+        answer_ids = tokenizer(answer,  return_tensors='pt', truncation=False).to(device)['input_ids']
+        context_ids = tokenizer(context, return_tensors='pt', truncation=False).to(device)['input_ids']
+
+        input_ids = torch.cat((context_ids, answer_ids), dim=1)
+        # mask answer_ids with -100 for loss calculation
+        labels = torch.cat((torch.full(context_ids.size(), -100).to(device), answer_ids.clone()), dim=1)
+        labels = torch.where(labels == pad_token, torch.tensor(-100, device=labels.device), labels)
+
+        # truncate from left
+        max_len = getattr(lm_model.config, "max_position_embeddings", None)
+        if isinstance(max_len, int):
+            input_ids = input_ids[:, -max_len:]
+            labels    = labels[:,    -max_len:]
+
+        with torch.no_grad():
+            outputs = lm_model(input_ids, labels=labels)
+        loss = outputs.loss.detach().cpu()
+
+        total_loss   += loss.item() * input_ids.size(0)
+        total_samples += input_ids.size(0)
+
+        subject = doc.get("subject", "")
+        question_num = int(doc_id) + 1
+        per_item_rows.append({
+            "subject": subject,
+            "question": question_num,
+            "loss": loss.item(),
+        })
+
+    if total_samples > 0:
+        average_loss = total_loss / total_samples
+        perplexity   = math.exp(average_loss)
+        entropy_bits = math.log2(perplexity)
+        bit_per_byte = entropy_bits / 8
+    else:
+        average_loss = float("nan")
+        perplexity   = float("nan")
+        bit_per_byte = float("nan")
+
+    print("perplexity", perplexity)
+
+    save_format="csv"
+    import csv
+    import datetime
+
+    first_doc = task.instances[0].doc if task.instances else {}
+    subject = first_doc.get("subject", "unknown")
+    # model_size = getattr(lm, "model_size", "unknown") 
+    model_size = "8" # TODO
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    print("subject, model_size:", subject, model_size)
+
+    base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/perplexity/rag/{model_size}" # TODO
+    save_path = os.path.join(
+        base_dir,
+        f"result_perplexity_{subject}_{model_size}_{timestamp}.csv"
+    )
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    write_header = not os.path.exists(save_path)
+    with open(save_path, "a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["subject", "question", "loss"])
+        if write_header:
+            w.writeheader()
+        w.writerows(per_item_rows)
+
+    return {
+        "average_loss": average_loss,
+        "perplexity": perplexity,
+        "bit_per_byte": bit_per_byte,
+        "num_eval_samples": total_samples,
+    }
+

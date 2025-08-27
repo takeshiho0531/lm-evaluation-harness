@@ -456,11 +456,13 @@ class Task(abc.ABC):
             total=num_docs,
         ):
             # sample fewshot context #TODO: need to offset doc_id by rank now!
+            retrieved_doc_id = doc_id + 1
             fewshot_ctx = self.fewshot_context(
                 doc,
                 num_fewshot=0
                 if self.config.num_fewshot is None
                 else self.config.num_fewshot,
+                retrieved_doc_id=retrieved_doc_id,
                 system_instruction=system_instruction,
                 apply_chat_template=apply_chat_template,
                 fewshot_as_multiturn=fewshot_as_multiturn,
@@ -977,6 +979,13 @@ class ConfigurableTask(Task):
                     eval_logger.debug(
                         f'Both target_delimiter "{self.config.target_delimiter}" and target choice: "{choice}" do not have whitespace, ignore if the language you are evaluating on does not require/use whitespace'
                     )
+        self.retrieved_texts = None
+        retrieved_json_path = "/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/api/train_splitindex_to_text.json"
+        import os
+        import json
+        if os.path.exists(retrieved_json_path):
+            with open(retrieved_json_path, "r") as f:
+                self.retrieved_texts = json.load(f)
 
     def download(
         self, dataset_kwargs: Optional[Dict[str, Any]] = None, **kwargs
@@ -1095,6 +1104,7 @@ class ConfigurableTask(Task):
         self,
         doc: dict,
         num_fewshot: int,
+        retrieved_doc_id: Optional[int] = None,
         system_instruction: Optional[str] = None,
         apply_chat_template: bool = False,
         fewshot_as_multiturn: bool = False,
@@ -1165,6 +1175,23 @@ class ConfigurableTask(Task):
                 )
 
         example = self.doc_to_text(doc)
+
+        ### RAG
+        retrieved_passages = (
+            self.retrieved_texts.get(str(retrieved_doc_id))
+            if self.retrieved_texts else None
+        )
+        if retrieved_passages:
+            context = "".join(retrieved_passages)
+            if isinstance(example, str):
+                contexts = (
+                    "Context:"
+                    + context
+                    + "\n-----"
+                )
+
+                example = contexts + "\n"+ example
+
         if apply_chat_template:
             if self.multiple_input:
                 # TODO: append prefill?
