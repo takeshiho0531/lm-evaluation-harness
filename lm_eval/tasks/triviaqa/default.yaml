@@ -4,7 +4,7 @@ dataset_name: rc.web.nocontext
 output_type: generate_until
 training_split: validation
 validation_split: train
-description: "/no_think Answer these questions:\n\n"
+description: "Answer these questions:\n\n"
 doc_to_text: "Question: {{question}}?\nAnswer:"
 doc_to_target: "{{answer.aliases}}"
 should_decontaminate: true
