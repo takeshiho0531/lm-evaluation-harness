@@ -983,6 +983,7 @@ class ConfigurableTask(Task):
         retrieved_json_path = "/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/api/train_splitindex_to_text.json"
         import os
         import json
+        assert os.path.exists(retrieved_json_path), f"Missing JSON file: {retrieved_json_path}"
         if os.path.exists(retrieved_json_path):
             with open(retrieved_json_path, "r") as f:
                 self.retrieved_texts = json.load(f)
@@ -1187,10 +1188,8 @@ class ConfigurableTask(Task):
                 contexts = (
                     "Context:"
                     + context
-                    + "\n-----"
                 )
 
-                example = contexts + "\n"+ example
 
         if apply_chat_template:
             if self.multiple_input:
@@ -1256,7 +1255,7 @@ class ConfigurableTask(Task):
             if self.multiple_input:
                 return labeled_examples
             if isinstance(example, str):
-                return labeled_examples + example + prefix
+                return contexts + "\n\n"+ labeled_examples + example + prefix
             elif isinstance(example, list):
                 return [labeled_examples + ex + prefix for ex in example]
             elif isinstance(example, int):

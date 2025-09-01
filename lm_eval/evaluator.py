@@ -640,8 +640,8 @@ def evaluate(
             num_fewshot = task_obj.config["num_fewshot"]
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_size = "06" # TODO
-            base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{model_size}"
+            model_size = "4b" # TODO
+            base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/Gemma3/{model_size}"
             os.makedirs(base_dir, exist_ok=True)
             filename = os.path.join(base_dir, f"results_{task_name}_fewshot{num_fewshot}_{timestamp}.txt")
             with open(filename, "w", encoding="utf-8") as f:
