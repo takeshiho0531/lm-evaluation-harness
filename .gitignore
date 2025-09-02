@@ -45,3 +45,7 @@ examples/wandb/
 
 # PyInstaller
 *.spec
+
+**/results/*
+lm_eval/api/train_splitindex_to_text.json
+lm_eval/api/validation_splitindex_to_text.json
