@@ -833,21 +833,18 @@ def _evaluate_perplexity_like_rulin(lm, task):
         instances.sort(key=lambda x: x.idx)
 
     def _norm_answer(x):
-        # 生成・MC両対応の正規化
         if isinstance(x, dict):
             for k in ("text", "answer", "value"):
                 if k in x:
                     return str(x[k])
             return str(x)
         if isinstance(x, (list, tuple, set)):
-            # 最初の非空文字列を採用（TriviaQAの aliases 等を許容）
             for y in x:
                 s = _norm_answer(y).strip()
                 if s:
                     return s
             return _norm_answer(next(iter(x))) if x else ""
         if isinstance(x, int):
-            # MMLUの gold が int の場合は選択肢文字へ
             if 0 <= x < 4:
                 return " " + "ABCD"[x]
             return str(x)
@@ -866,8 +863,6 @@ def _evaluate_perplexity_like_rulin(lm, task):
         # gold_cont_str = _norm_answer(gold_cont).strip()
         gold_cont_str = _norm_answer(gold_cont)
 
-
-        # MMLU向け: 選択肢一致で gold_inst を探す
         gold_inst = None
         for inst in instances:
             if isinstance(inst.arguments, (list, tuple)) and len(inst.arguments) > 1:
@@ -877,36 +872,29 @@ def _evaluate_perplexity_like_rulin(lm, task):
                     gold_inst = inst
                     break
 
-        # 生成タスク向けフォールバック
         if gold_inst is None:
             if len(instances) == 1 and isinstance(instances[0].arguments, (list, tuple)) and len(instances[0].arguments) >= 1:
                 context = _norm_answer(instances[0].arguments[0])
                 answer  = gold_cont_str
             else:
-                # 他にも arguments[1] を持つものがあれば利用
                 picked = None
                 for inst in instances:
                     if isinstance(inst.arguments, (list, tuple)) and len(inst.arguments) > 1:
                         picked = inst
                         break
                 if picked is None:
-                    # 何も作れない場合はスキップ
                     continue
                 context = _norm_answer(picked.arguments[0])
-                # gold が取れていれば gold を優先、なければ arguments[1]
                 answer  = gold_cont_str if gold_cont_str else _norm_answer(picked.arguments[1]).strip()
         else:
             context = _norm_answer(gold_inst.arguments[0])
             answer  = _norm_answer(gold_inst.arguments[1]).strip()
 
-        # 空文字はスキップ（稀にある）
         if not answer.strip() or not context.strip():
             continue
 
-        # 区切りを必ず1つ確保
         if not (context.endswith(" ") or context.endswith("\n")):
             context = context + " "
-        # 先頭が英数字なのにスペースが無ければ入れる（好みで）
         if answer and not answer[0].isspace():
             answer = " " + answer
 
