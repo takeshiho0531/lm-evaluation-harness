@@ -455,12 +455,14 @@ class Task(abc.ABC):
             doc_id_docs,
             total=num_docs,
         ):
+            retrieved_doc_id = doc_id + 1
             # sample fewshot context #TODO: need to offset doc_id by rank now!
             fewshot_ctx = self.fewshot_context(
                 doc,
                 num_fewshot=0
                 if self.config.num_fewshot is None
                 else self.config.num_fewshot,
+                retrieved_doc_id=retrieved_doc_id,
                 system_instruction=system_instruction,
                 apply_chat_template=apply_chat_template,
                 fewshot_as_multiturn=fewshot_as_multiturn,
@@ -978,6 +980,33 @@ class ConfigurableTask(Task):
                         f'Both target_delimiter "{self.config.target_delimiter}" and target choice: "{choice}" do not have whitespace, ignore if the language you are evaluating on does not require/use whitespace'
                     )
 
+                import os, json
+                self.retrieved_texts = None
+                retrieved_json_path = self.get_retrieved_json_path(task_name=self.config.task)
+                assert os.path.exists(retrieved_json_path), f"Missing JSON file: {retrieved_json_path}"
+                if os.path.exists(retrieved_json_path):
+                    with open(retrieved_json_path, "r") as f:
+                        self.retrieved_texts = json.load(f)
+
+
+    def get_retrieved_json_path(self, task_name: str) -> str:
+        import os, glob
+        subdir = task_name.replace("mmlu_", "") + "_test"
+        base_path = "lm_eval/retrieved_docs/mmlu"
+        index_prefix = "hermes_index_monolithic_100M__"
+        model_name = "rag-token-nq"
+        retrieved_file = "retrieved_texts.json"
+        search_pattern = os.path.join(
+            base_path,
+            f"{index_prefix}{subdir}_{model_name}_*",
+            "nprobe256_bs32_k5_nt16_*",
+            retrieved_file
+        )
+        matched_files = glob.glob(search_pattern)
+        if not matched_files:
+            raise FileNotFoundError(f"No retrieved_texts.json found for task: {task_name}", search_pattern)
+        return max(matched_files, key=os.path.getmtime)
+
     def download(
         self, dataset_kwargs: Optional[Dict[str, Any]] = None, **kwargs
     ) -> None:
@@ -1095,6 +1124,7 @@ class ConfigurableTask(Task):
         self,
         doc: dict,
         num_fewshot: int,
+        retrieved_doc_id: Optional[int] = None,
         system_instruction: Optional[str] = None,
         apply_chat_template: bool = False,
         fewshot_as_multiturn: bool = False,
@@ -1165,6 +1195,20 @@ class ConfigurableTask(Task):
                 )
 
         example = self.doc_to_text(doc)
+
+        ### RAG
+        retrieved_passages = (
+            self.retrieved_texts.get(str(retrieved_doc_id))
+            if self.retrieved_texts else None
+        )
+        if retrieved_passages:
+            context = "".join(retrieved_passages)
+            if isinstance(example, str):
+                contexts = (
+                    "Context:"
+                    + context
+                )
+
         if apply_chat_template:
             if self.multiple_input:
                 # TODO: append prefill?
@@ -1229,7 +1273,7 @@ class ConfigurableTask(Task):
             if self.multiple_input:
                 return labeled_examples
             if isinstance(example, str):
-                return labeled_examples + example + prefix
+                return contexts + "\n\n"+ labeled_examples + example + prefix
             elif isinstance(example, list):
                 return [labeled_examples + ex + prefix for ex in example]
             elif isinstance(example, int):
