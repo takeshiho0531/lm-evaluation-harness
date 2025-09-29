@@ -624,13 +624,12 @@ def evaluate(
             )
 
             task_name = next(iter(task_dict))
-            task_obj = task_dict[task_name]
-            num_fewshot = task_obj.config["num_fewshot"]
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_size = "1b" # TODO
-            model_type = "Falcon3" # TODO
+            model_size = "17b" # TODO
+            model_type = "Qwen3" # TODO
             datastore_name = "Sphere100M" # TODO
+            num_fewshot = 5 # TODO
             base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{datastore_name}/{model_type}/{model_size}"
             os.makedirs(base_dir, exist_ok=True)
             filename = os.path.join(base_dir, f"results_{task_name}_fewshot{num_fewshot}_{timestamp}.txt")
