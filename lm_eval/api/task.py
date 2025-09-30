@@ -989,23 +989,62 @@ class ConfigurableTask(Task):
                         self.retrieved_texts = json.load(f)
 
 
+    # def get_retrieved_json_path(self, task_name: str) -> str:
+    #     import os, glob
+    #     subdir = task_name.replace("mmlu_", "") + "_test"
+    #     base_path = "lm_eval/retrieved_docs/mmlu"
+    #     index_prefix = "hermes_index_monolithic_100M__"
+    #     model_name = "rag-token-nq"
+    #     retrieved_file = "retrieved_texts.json"
+    #     search_pattern = os.path.join(
+    #         base_path,
+    #         f"{index_prefix}{subdir}_{model_name}_*",
+    #         "nprobe256_bs32_k5_nt16_*",
+    #         retrieved_file
+    #     )
+    #     matched_files = glob.glob(search_pattern)
+    #     if not matched_files:
+    #         raise FileNotFoundError(f"No retrieved_texts.json found for task: {task_name}", search_pattern)
+    #     return max(matched_files, key=os.path.getmtime)
+
     def get_retrieved_json_path(self, task_name: str) -> str:
+        """
+        Resolve converted retrieval-results JSON path for **Compactds** MMLU tasks only.
+
+        Examples of accepted task_name:
+        - "mmlu_abstract_algebra:mc"
+        - "mmlu_abstract_algebra"   -> auto-add ":mc"
+        - "abstract_algebra"        -> auto-add "mmlu_" + ":mc"
+
+        Looks under: lm_eval/retrieved_docs/compactds/
+        Matches:     <task_key>::retrieval_q_retrieved_results.json
+        """
         import os, glob
-        subdir = task_name.replace("mmlu_", "") + "_test"
-        base_path = "lm_eval/retrieved_docs/mmlu"
-        index_prefix = "hermes_index_monolithic_100M__"
-        model_name = "rag-token-nq"
-        retrieved_file = "retrieved_texts.json"
-        search_pattern = os.path.join(
-            base_path,
-            f"{index_prefix}{subdir}_{model_name}_*",
-            "nprobe256_bs32_k5_nt16_*",
-            retrieved_file
-        )
-        matched_files = glob.glob(search_pattern)
-        if not matched_files:
-            raise FileNotFoundError(f"No retrieved_texts.json found for task: {task_name}", search_pattern)
-        return max(matched_files, key=os.path.getmtime)
+
+        base_dir = "lm_eval/retrieved_docs/compactds"
+
+        # Normalize task name
+        t = task_name.strip()
+        if not t.startswith("mmlu_"):
+            t = "mmlu_" + t
+        if ":" not in t:
+            t = t + ":mc"
+
+        task_key = t  # e.g., "mmlu_abstract_algebra:mc"
+
+        # Expected file pattern
+        pattern = os.path.join(base_dir, f"{task_key}::retrieval_q_retrieved_results.json")
+        matched = glob.glob(pattern)
+
+        if not matched:
+            # diagnostic: list similar files
+            nearby = sorted(glob.glob(os.path.join(base_dir, f"{task_key.split(':')[0]}*")))[:10]
+            raise FileNotFoundError(
+                f"No retrieved_results.json found for task: {task_name}",
+                {"tried_pattern": pattern, "nearby": nearby},
+            )
+        print(f"Resolved retrieved_results.json for {task_name}: {matched[0]}")
+        return matched[0]
 
     def download(
         self, dataset_kwargs: Optional[Dict[str, Any]] = None, **kwargs

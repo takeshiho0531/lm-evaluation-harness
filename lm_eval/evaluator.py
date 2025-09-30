@@ -626,9 +626,9 @@ def evaluate(
             task_name = next(iter(task_dict))
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_size = "17b" # TODO
-            model_type = "Qwen3" # TODO
-            datastore_name = "Sphere100M" # TODO
+            model_size = "4b" # TODO
+            model_type = "Gemma3" # TODO
+            datastore_name = "Compactds" # TODO
             num_fewshot = 5 # TODO
             base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{datastore_name}/{model_type}/{model_size}"
             os.makedirs(base_dir, exist_ok=True)
