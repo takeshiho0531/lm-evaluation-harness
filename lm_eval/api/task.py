@@ -980,13 +980,18 @@ class ConfigurableTask(Task):
                         f'Both target_delimiter "{self.config.target_delimiter}" and target choice: "{choice}" do not have whitespace, ignore if the language you are evaluating on does not require/use whitespace'
                     )
         self.retrieved_texts = None
-        retrieved_json_path = "/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/api/train_splitindex_to_text.json"
+        import os
+        retrieved_json_path = os.getenv(
+            "RETRIEVED_JSON_PATH",
+            "/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/retrieved_docs/triviaqa/compactds/triviaqa::olmes_q_retrieved_results_::_IVFPQ.65536.64.64.10.json"
+        )
         import os
         import json
         assert os.path.exists(retrieved_json_path), f"Missing JSON file: {retrieved_json_path}"
         if os.path.exists(retrieved_json_path):
             with open(retrieved_json_path, "r") as f:
                 self.retrieved_texts = json.load(f)
+            print(f"Loaded {len(self.retrieved_texts)} retrieved docs from {retrieved_json_path}")
 
     def download(
         self, dataset_kwargs: Optional[Dict[str, Any]] = None, **kwargs
