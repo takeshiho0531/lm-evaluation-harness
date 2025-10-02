@@ -4,25 +4,23 @@ LOGDIR="logs"
 mkdir -p "$LOGDIR"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 MODE=$([ -n "${LIMIT:-}" ] && echo "TRIAL" || echo "FULL")
-LOGFILE="$LOGDIR/run_smaller_models_${MODE}_$TIMESTAMP.log"
-ERRFILE="$LOGDIR/run_smaller_models_${MODE}_${TIMESTAMP}_stderr.log"
+LOGFILE="$LOGDIR/run_bigger_models_${MODE}_$TIMESTAMP.log"
+ERRFILE="$LOGDIR/run_bigger_models_${MODE}_${TIMESTAMP}_stderr.log"
 exec > >(tee -a "$LOGFILE")
 
 export RETRIEVED_JSON_PATH="lm_eval/retrieved_docs/triviaqa/compactds/triviaqa::olmes_q_retrieved_results_::_IVFPQ.65536.64.32.10.json" 
 export TORCHDYNAMO_DISABLE=1
 
 models=(
-    "Qwen/Qwen3-0.6B"
-    "Qwen/Qwen3-1.7B"
-    "Qwen/Qwen3-4B"
-    "google/gemma-3-270m"
-    "google/gemma-3-1b-pt"
-    "google/gemma-3-4b-pt"
-    "Qwen/Qwen2.5-0.5B"
-    "Qwen/Qwen2.5-1.5B"
-    "Qwen/Qwen2.5-3B"
-    "tiiuae/Falcon3-1B-Base"
-    "tiiuae/Falcon3-3B-Base"
+    "Qwen/Qwen3-8B"
+    "Qwen/Qwen3-14B"
+    "google/gemma-3-12b-pt"
+    "Qwen/Qwen2.5-7B"
+    "Qwen/Qwen2.5-14B"
+    "tiiuae/Falcon3-7B-Base"
+    "tiiuae/Falcon3-10B-Base"
+    "meta-llama/Llama-2-7b-hf"
+    "meta-llama/Llama-2-13b-hf"
 )
 
 TASKS="triviaqa"
@@ -37,7 +35,7 @@ for model in "${models[@]}"; do
     echo "============================"
 
     MODEL_ARGS="pretrained=$model"
-    if [[ "$model" == "google/gemma-3-4b-pt" ]]; then
+    if [[ "$model" == "google/gemma-3-12b-pt" ]]; then
         MODEL_ARGS="$MODEL_ARGS,max_length=8192"
     fi
 
