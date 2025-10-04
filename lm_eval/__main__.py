@@ -527,6 +527,10 @@ def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
         if "groups" in results:
             print(make_table(results, "groups"))
 
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        print(timestamp)
+
         if args.wandb_args:
             # Tear down wandb run once all the logging is done.
             wandb_logger.run.finish()

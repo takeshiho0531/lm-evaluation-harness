@@ -623,17 +623,20 @@ def evaluate(
                 samples=indices,
             )
 
-            task_name = next(iter(task_dict))
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_size = "4b" # TODO
-            model_type = "Gemma3" # TODO
+            task_name = "mmlu"
             datastore_name = "Compactds" # TODO
             num_fewshot = 5 # TODO
-            base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{datastore_name}/{model_type}/{model_size}"
+            if isinstance(lm.model.name_or_path, str):
+                model_type = lm.model.name_or_path.replace("/", "-")
+            else:
+                model_type = "model"
+            base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{task_name}/{datastore_name}/"
             os.makedirs(base_dir, exist_ok=True)
-            filename = os.path.join(base_dir, f"results_{task_name}_fewshot{num_fewshot}_{timestamp}.txt")
-            with open(filename, "w", encoding="utf-8") as f:
+            filename = os.path.join(base_dir, f"results_{task_name}_{model_type}_fewshot{num_fewshot}_{timestamp}.txt")
+            with open(filename, "a", encoding="utf-8") as f:
+                f.write(f"{task.instances[0].task_name}\n")
                 for doc_id, doc in doc_iterator:
                     if indices:
                         doc_id_true = indices[doc_id]
@@ -643,6 +646,8 @@ def evaluate(
                     metrics = task.process_results(
                         doc, [req.filtered_resps[filter_key] for req in requests]
                     )
+                    output_line = f"Q {doc_id_true + 1} : {metrics}\n"
+                    f.write(output_line)
                     if log_samples:
                         target = task.doc_to_target(doc)
                         example = {
