@@ -635,6 +635,7 @@ def evaluate(
             base_dir = f"/home/akiho.kawada/lm-eval-original/lm-evaluation-harness/lm_eval/results/acc/rag/{task_name}/{datastore_name}/"
             os.makedirs(base_dir, exist_ok=True)
             filename = os.path.join(base_dir, f"results_{task_name}_{model_type}_fewshot{num_fewshot}_{timestamp}.txt")
+            print(f"***** Results will be saved to {filename} *****")
             with open(filename, "a", encoding="utf-8") as f:
                 f.write(f"{task.instances[0].task_name}\n")
                 for doc_id, doc in doc_iterator:

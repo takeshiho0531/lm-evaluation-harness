@@ -1021,8 +1021,10 @@ class ConfigurableTask(Task):
         """
         import os, glob
 
-        base_dir = "lm_eval/retrieved_docs/compactds"
-
+        base_dir = os.getenv(
+            "RETRIEVED_JSONS_DIR",
+            "lm_eval/retrieved_docs/compactds"
+        )
         # Normalize task name
         t = task_name.strip()
         if not t.startswith("mmlu_"):
@@ -1043,7 +1045,7 @@ class ConfigurableTask(Task):
                 f"No retrieved_results.json found for task: {task_name}",
                 {"tried_pattern": pattern, "nearby": nearby},
             )
-        print(f"Resolved retrieved_results.json for {task_name}: {matched[0]}")
+        print(f"Resolved retrieved_results.jsons dir: {base_dir}")
         return matched[0]
 
     def download(
