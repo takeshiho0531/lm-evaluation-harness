@@ -622,43 +622,60 @@ def evaluate(
                 world_size=WORLD_SIZE,
                 samples=indices,
             )
-            for doc_id, doc in doc_iterator:
-                if indices:
-                    doc_id_true = indices[doc_id]
-                else:
-                    doc_id_true = doc_id
-                requests = instances_by_doc_id[doc_id]
-                metrics = task.process_results(
-                    doc, [req.filtered_resps[filter_key] for req in requests]
-                )
-                if log_samples:
-                    target = task.doc_to_target(doc)
-                    example = {
-                        "doc_id": doc_id_true,
-                        "doc": doc,
-                        "target": target,
-                        "arguments": [req.args for req in requests],
-                        "resps": [req.resps for req in requests],
-                        "filtered_resps": [
-                            req.filtered_resps[filter_key] for req in requests
-                        ],
-                        "filter": filter_key,
-                        "metrics": list(metrics.keys()),
-                        "doc_hash": hash_string(
-                            json.dumps(
-                                requests[0].doc,
-                                indent=2,
-                                default=handle_non_serializable,
-                                ensure_ascii=False,
-                            )
-                        ),
-                        "prompt_hash": hash_string(requests[0].arguments[0]),
-                        "target_hash": hash_string(str(target)),
-                    }
-                    example.update(metrics)
-                    task_output.logged_samples.append(example)
-                for metric, value in metrics.items():
-                    task_output.sample_metrics[(metric, filter_key)].append(value)
+
+            task_name = "natural_questions"
+            datastore_name = "no_retrieval"
+            num_fewshot = 5
+            if isinstance(lm.model.name_or_path, str):
+                model_type = lm.model.name_or_path.replace("/", "-")
+            else:
+                model_type = "model"
+            base_dir = f"lm_eval/results/acc/rag/{task_name}/{datastore_name}/"
+            os.makedirs(base_dir, exist_ok=True)
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            print("timestamp:", timestamp)
+            filename = os.path.join(base_dir, f"results_{task_name}_{model_type}_fewshot{num_fewshot}_{timestamp}.txt")
+            with open(filename, "a", encoding="utf-8") as f:
+                for doc_id, doc in doc_iterator:
+                    if indices:
+                        doc_id_true = indices[doc_id]
+                    else:
+                        doc_id_true = doc_id
+                    requests = instances_by_doc_id[doc_id]
+                    metrics = task.process_results(
+                        doc, [req.filtered_resps[filter_key] for req in requests]
+                    )
+                    output_line = f"Q {doc_id_true + 1} : {metrics}\n"
+                    f.write(output_line)
+                    if log_samples:
+                        target = task.doc_to_target(doc)
+                        example = {
+                            "doc_id": doc_id_true,
+                            "doc": doc,
+                            "target": target,
+                            "arguments": [req.args for req in requests],
+                            "resps": [req.resps for req in requests],
+                            "filtered_resps": [
+                                req.filtered_resps[filter_key] for req in requests
+                            ],
+                            "filter": filter_key,
+                            "metrics": list(metrics.keys()),
+                            "doc_hash": hash_string(
+                                json.dumps(
+                                    requests[0].doc,
+                                    indent=2,
+                                    default=handle_non_serializable,
+                                    ensure_ascii=False,
+                                )
+                            ),
+                            "prompt_hash": hash_string(requests[0].arguments[0]),
+                            "target_hash": hash_string(str(target)),
+                        }
+                        example.update(metrics)
+                        task_output.logged_samples.append(example)
+                    for metric, value in metrics.items():
+                        task_output.sample_metrics[(metric, filter_key)].append(value)
 
     if WORLD_SIZE > 1:
         # if multigpu, then gather data across all ranks to rank 0
