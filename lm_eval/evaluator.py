@@ -623,7 +623,7 @@ def evaluate(
                 samples=indices,
             )
 
-            task_name = "natural_questions"
+            task_name = os.getenv("TASK_NAME", task_output.task_name)
             datastore_name = "no_retrieval"
             num_fewshot = 5
             if isinstance(lm.model.name_or_path, str):
@@ -637,6 +637,7 @@ def evaluate(
             print("timestamp:", timestamp)
             filename = os.path.join(base_dir, f"results_{task_name}_{model_type}_fewshot{num_fewshot}_{timestamp}.txt")
             with open(filename, "a", encoding="utf-8") as f:
+                f.write(f"{task.instances[0].task_name} \n")
                 for doc_id, doc in doc_iterator:
                     if indices:
                         doc_id_true = indices[doc_id]

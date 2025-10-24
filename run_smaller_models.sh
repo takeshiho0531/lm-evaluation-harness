@@ -10,6 +10,13 @@ exec > >(tee -a "$LOGFILE")
 
 export TORCHDYNAMO_DISABLE=1
 
+tasks=(
+    "nq_open"
+    "mmlu"
+    "gsm8k"
+    "ai2_arc"
+)
+
 models=(
     "Qwen/Qwen3-0.6B"
     "Qwen/Qwen3-1.7B"
@@ -24,34 +31,40 @@ models=(
     "tiiuae/Falcon3-3B-Base"
 )
 
-TASKS="nq_open"
 NUM_FEWSHOT=5
 BATCH_SIZE=2
 DEVICE="cuda:0"
 
-for model in "${models[@]}"; do
-    echo "============================"
-    echo " Running model: $model "
-    echo "============================"
+for TASK_NAME in "${tasks[@]}"; do
+    echo "#######################################"
+    echo " Task: $TASK_NAME"
+    echo "#######################################"
 
-    MODEL_ARGS="pretrained=$model"
-    if [[ "$model" == "google/gemma-3-4b-pt" ]]; then
-        MODEL_ARGS="$MODEL_ARGS,max_length=8192"
-    fi
+    for model in "${models[@]}"; do
+        echo "============================"
+        echo " Running model: $model "
+        echo "============================"
 
-    echo "Model args: $MODEL_ARGS"
-    lm-eval \
-        --model hf \
-        --model_args "$MODEL_ARGS" \
-        --tasks $TASKS \
-        --num_fewshot $NUM_FEWSHOT \
-        --batch_size $BATCH_SIZE \
-        --device $DEVICE ${LIMIT:+--limit $LIMIT}
+        MODEL_ARGS="pretrained=$model"
+        if [[ "$model" == "google/gemma-3-4b-pt" ]]; then
+            MODEL_ARGS="$MODEL_ARGS,max_length=8192"
+        fi
 
-    if [ $? -ne 0 ]; then
-        echo "⚠️ Error with $model, skipping..."
-    fi
+        export TASK_NAME="$TASK_NAME"
 
+        echo "Model args: $MODEL_ARGS"
+        lm-eval \
+            --model hf \
+            --model_args "$MODEL_ARGS" \
+            --tasks $TASK_NAME \
+            --num_fewshot $NUM_FEWSHOT \
+            --batch_size $BATCH_SIZE \
+            --device $DEVICE ${LIMIT:+--limit $LIMIT}
+
+        if [ $? -ne 0 ]; then
+            echo "⚠️ Error with $model on task $TASK_NAME, skipping..."
+        fi
+    done
 done
 
-echo "✅ All models attempted."
+echo "✅ All tasks & models attempted."
