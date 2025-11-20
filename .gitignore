@@ -49,3 +49,5 @@ examples/wandb/
 **/results/*
 lm_eval/api/train_splitindex_to_text.json
 lm_eval/api/validation_splitindex_to_text.json
+lm_eval/api/triviaqa_lm_eval_harness_version.json
+*/retrieved_docs/** 
