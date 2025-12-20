@@ -3,6 +3,15 @@
 LOGDIR="logs"
 mkdir -p "$LOGDIR"
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+
+if [[ -z "${LIMIT:-}" ]]; then
+    MODE="FULL"
+elif [[ "$LIMIT" == "5000" ]]; then
+    MODE="SUBSET"
+else
+    MODE="TRIAL"
+fi
+
 MODE=$([ -n "${LIMIT:-}" ] && echo "TRIAL" || echo "FULL")
 LOGFILE="$LOGDIR/run_models_${MODE}_$TIMESTAMP.log"
 ERRFILE="$LOGDIR/run_models_${MODE}_${TIMESTAMP}_stderr.log"
@@ -11,19 +20,19 @@ exec > >(tee -a "$LOGFILE")
 export TORCHDYNAMO_DISABLE=1
 
 retrieved_json_paths=(
-    "lm_eval/retrieved_docs/triviaqa/compactds/triviaqa::olmes_q_retrieved_results_::_IVFPQ.65536.64.256.5.json"
+    "retrieved_docs/triviaqa/triviaqa::olmes_q_retrieved_results::_IVFPQ.65536.64.256::k5.converted.k1.json"
 )
 
 models=(
     "Qwen/Qwen3-0.6B"
     "Qwen/Qwen3-1.7B"
     "Qwen/Qwen3-4B"
-    "Qwen/Qwen3-8B"
-    "Qwen/Qwen3-14B"
+    # "Qwen/Qwen3-8B"
+    # "Qwen/Qwen3-14B"
     "google/gemma-3-270m"
     "google/gemma-3-1b-pt"
     "google/gemma-3-4b-pt"
-    "google/gemma-3-12b-pt"
+    # "google/gemma-3-12b-pt"
 )
 
 TASKS="triviaqa"
