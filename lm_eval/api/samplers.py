@@ -93,12 +93,11 @@ class ContextSampler:
         selected_docs = [x for x in fewshotex if x != doc][:num_fewshot]
 
         labeled_examples = ""
-        for idx, doc in selected_docs:
+        for doc in selected_docs:
             doc_content = self.doc_to_text(doc)
             doc_target = self.doc_to_target(doc)
             if self.config.doc_to_choice is None or isinstance(doc_content, str):
                 labeled_examples += doc_content
-
             else:
                 labeled_examples += self.doc_to_choice(doc)[doc_content]
 
@@ -187,8 +186,8 @@ class ContextSampler:
         """
         Draw `n` samples from our fewshot docs. This method should be overridden by subclasses.
         """
-        sampled_docs = self.rnd.sample(list(enumerate(self.docs)), n)
-        return sampled_docs
+
+        return self.rnd.sample(self.docs, n)
 
 
 class FirstNSampler(ContextSampler):
